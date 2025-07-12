@@ -170,8 +170,8 @@ def anova_test():
         if anova_type == 'one_way':
             result = service.anova(dataset_id, dependent, independent[0] if independent else None, 'one_way')
         elif anova_type == 'two_way':
-            if len(independent) < 2:
-                return jsonify({'success': False, 'error': 'Two independent variables required for two-way ANOVA'}), 400
+            if not independent or len(independent) < 2:
+                return jsonify({'success': False, 'error': 'Two independent variables required for two-way ANOVA. Please select exactly 2 independent variables.'}), 400
             result = service.anova(dataset_id, dependent, independent[0], 'two_way', independent[1])
         else:
             return jsonify({'success': False, 'error': f'ANOVA type {anova_type} not implemented'}), 400
@@ -608,9 +608,9 @@ def debug_dataset(dataset_id):
                 
                 if len(valid_numeric) > 0:
                     column_info[col]['numeric_stats'] = {
-                        'min': float(valid_numeric.min()),
-                        'max': float(valid_numeric.max()),
-                        'mean': float(valid_numeric.mean())
+                                            'min': float(valid_numeric.min()) if not pd.isna(valid_numeric.min()) else None,
+                    'max': float(valid_numeric.max()) if not pd.isna(valid_numeric.max()) else None,
+                    'mean': float(valid_numeric.mean()) if not pd.isna(valid_numeric.mean()) else None
                     }
                     
             except Exception as e:

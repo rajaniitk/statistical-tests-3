@@ -20,6 +20,25 @@ class StatisticalTests:
     def __init__(self):
         self.data_processor = DataProcessor()
         
+    def _serialize_for_json(self, obj):
+        """Convert numpy/pandas types to JSON-serializable types"""
+        if isinstance(obj, (np.int32, np.int64, np.integer)):
+            return int(obj)
+        elif isinstance(obj, (np.float32, np.float64, np.floating)):
+            return None if np.isnan(obj) else float(obj)
+        elif isinstance(obj, (np.bool_, bool)):
+            return bool(obj)
+        elif isinstance(obj, np.ndarray):
+            return [self._serialize_for_json(item) for item in obj]
+        elif isinstance(obj, dict):
+            return {key: self._serialize_for_json(value) for key, value in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [self._serialize_for_json(item) for item in obj]
+        elif pd.isna(obj):
+            return None
+        else:
+            return obj
+    
     def _validate_numeric_column(self, df, column_name):
         """Helper method to validate and convert a column to numeric"""
         if column_name not in df.columns:
@@ -77,13 +96,7 @@ class StatisticalTests:
             if len(numeric_cols) > 0:
                 numeric_stats = df[numeric_cols].describe().to_dict()
                 # Convert numpy types to regular Python types for JSON serialization
-                for col in numeric_stats:
-                    for stat in numeric_stats[col]:
-                        if pd.isna(numeric_stats[col][stat]):
-                            numeric_stats[col][stat] = None
-                        else:
-                            numeric_stats[col][stat] = float(numeric_stats[col][stat])
-                results['numeric'] = numeric_stats
+                results['numeric'] = self._serialize_for_json(numeric_stats)
                 
             if len(categorical_cols) > 0:
                 results['categorical'] = {}
@@ -281,10 +294,10 @@ class StatisticalTests:
                 results.update({
                     'null_hypothesis': f'Mean of {column} equals {mu}',
                     'alternative_hypothesis': f'Mean of {column} does not equal {mu}',
-                    'test_statistic': float(statistic),
-                    'p_value': float(p_value),
+                    'test_statistic': self._serialize_for_json(statistic),
+                    'p_value': self._serialize_for_json(p_value),
                     'degrees_of_freedom': len(data) - 1,
-                    'sample_mean': float(data.mean()),
+                    'sample_mean': self._serialize_for_json(data.mean()),
                     'sample_size': len(data),
                     'interpretation': self.interpret_p_value(p_value, f'reject null hypothesis that mean equals {mu}')
                 })
@@ -296,41 +309,54 @@ class StatisticalTests:
                 if group_column not in df.columns:
                     return {'success': False, 'error': f'Group column "{group_column}" not found'}
                 
-                # Validate the data column
-                data, error = self._validate_numeric_column(df, column)
-                if error:
-                    return {'success': False, 'error': error}
+                # Remove rows with missing values in either column
+                clean_df = df[[column, group_column]].dropna()
+                
+                if len(clean_df) < 4:
+                    return {'success': False, 'error': f'Insufficient data for two-sample t-test. Only {len(clean_df)} complete observations available. At least 4 are required.'}
+                
+                # Validate the data column can be converted to numeric
+                try:
+                    clean_df[column] = pd.to_numeric(clean_df[column], errors='coerce')
+                    clean_df = clean_df.dropna()  # Remove rows that couldn't be converted
+                except:
+                    return {'success': False, 'error': f'Cannot convert column "{column}" to numeric data'}
+                
+                if len(clean_df) < 4:
+                    return {'success': False, 'error': f'Insufficient numeric data for two-sample t-test. Only {len(clean_df)} valid numeric observations available.'}
+                
+                # Check unique values in group column
+                unique_groups = clean_df[group_column].unique()
+                
+                if len(unique_groups) != 2:
+                    return {'success': False, 'error': f'Exactly two groups required for two-sample t-test. Found {len(unique_groups)} unique groups in column "{group_column}": {list(unique_groups)}'}
                 
                 # Group the data
-                clean_df = df[[column, group_column]].dropna()
-                groups = clean_df.groupby(group_column)[column].apply(lambda x: pd.to_numeric(x, errors='coerce').dropna())
-                group_names = list(groups.index)
+                group1_data = clean_df[clean_df[group_column] == unique_groups[0]][column]
+                group2_data = clean_df[clean_df[group_column] == unique_groups[1]][column]
                 
-                if len(group_names) != 2:
-                    return {'success': False, 'error': f'Exactly two groups required for two-sample t-test. Found {len(group_names)} groups: {group_names}'}
-                
-                group1, group2 = groups.iloc[0], groups.iloc[1]
-                
-                if len(group1) < 2 or len(group2) < 2:
-                    return {'success': False, 'error': f'Each group must have at least 2 observations. Group sizes: {len(group1)}, {len(group2)}'}
+                if len(group1_data) < 2 or len(group2_data) < 2:
+                    return {'success': False, 'error': f'Each group must have at least 2 observations. Group sizes: {unique_groups[0]}={len(group1_data)}, {unique_groups[1]}={len(group2_data)}'}
                 
                 # Equal variance test first
-                levene_stat, levene_p = stats.levene(group1, group2)
+                levene_stat, levene_p = stats.levene(group1_data, group2_data)
                 equal_var = levene_p > 0.05
                 
-                statistic, p_value = stats.ttest_ind(group1, group2, equal_var=equal_var)
+                statistic, p_value = stats.ttest_ind(group1_data, group2_data, equal_var=equal_var)
                 
                 results.update({
-                    'null_hypothesis': f'Means of {group_names[0]} and {group_names[1]} are equal',
-                    'alternative_hypothesis': f'Means of {group_names[0]} and {group_names[1]} are not equal',
-                    'test_statistic': float(statistic),
-                    'p_value': float(p_value),
+                    'null_hypothesis': f'Means of {unique_groups[0]} and {unique_groups[1]} are equal',
+                    'alternative_hypothesis': f'Means of {unique_groups[0]} and {unique_groups[1]} are not equal',
+                    'test_statistic': self._serialize_for_json(statistic),
+                    'p_value': self._serialize_for_json(p_value),
                     'equal_variance_assumed': equal_var,
-                    'levene_test_p_value': float(levene_p),
-                    'group1_mean': float(group1.mean()),
-                    'group2_mean': float(group2.mean()),
-                    'group1_size': len(group1),
-                    'group2_size': len(group2),
+                    'levene_test_p_value': self._serialize_for_json(levene_p),
+                    'group1_mean': self._serialize_for_json(group1_data.mean()),
+                    'group2_mean': self._serialize_for_json(group2_data.mean()),
+                    'group1_size': len(group1_data),
+                    'group2_size': len(group2_data),
+                    'group1_name': str(unique_groups[0]),
+                    'group2_name': str(unique_groups[1]),
                     'interpretation': self.interpret_p_value(p_value, f'reject null hypothesis that group means are equal')
                 })
                 
@@ -361,10 +387,10 @@ class StatisticalTests:
                         'column2': column2,
                         'null_hypothesis': f'Mean difference between {column1} and {column2} is zero',
                         'alternative_hypothesis': f'Mean difference between {column1} and {column2} is not zero',
-                        'test_statistic': float(statistic),
-                        'p_value': float(p_value),
+                        'test_statistic': self._serialize_for_json(statistic),
+                        'p_value': self._serialize_for_json(p_value),
                         'degrees_of_freedom': len(numeric_df) - 1,
-                        'mean_difference': float((numeric_df[column1] - numeric_df[column2]).mean()),
+                        'mean_difference': self._serialize_for_json((numeric_df[column1] - numeric_df[column2]).mean()),
                         'sample_size': len(numeric_df),
                         'interpretation': self.interpret_p_value(p_value, 'reject null hypothesis of no difference')
                     })
@@ -377,12 +403,12 @@ class StatisticalTests:
                 analysis_type='ttest',
                 analysis_name=f'{test_type.replace("_", " ").title()} T-Test',
                 parameters={'test_type': test_type, 'column': column, 'group_column': group_column, 'mu': mu, 'column1': column1, 'column2': column2},
-                results=results
+                results=self._serialize_for_json(results)
             )
             db.session.add(analysis)
             db.session.commit()
             
-            return {'success': True, 'results': results}
+            return {'success': True, 'results': self._serialize_for_json(results)}
             
         except Exception as e:
             current_app.logger.error(f"T-test error: {str(e)}")
@@ -434,15 +460,15 @@ class StatisticalTests:
                     'independent_variable': independent_var,
                     'null_hypothesis': f'All group means are equal across {independent_var}',
                     'alternative_hypothesis': f'At least one group mean differs across {independent_var}',
-                    'f_statistic': float(statistic),
-                    'p_value': float(p_value),
+                    'f_statistic': self._serialize_for_json(statistic),
+                    'p_value': self._serialize_for_json(p_value),
                     'degrees_of_freedom_between': len(groups) - 1,
                     'degrees_of_freedom_within': len(clean_df) - len(groups),
-                    'eta_squared': float(eta_squared),
+                    'eta_squared': self._serialize_for_json(eta_squared),
                     'group_statistics': {
                         str(name): {
-                            'mean': float(np.mean(group)),
-                            'std': float(np.std(group)),
+                            'mean': self._serialize_for_json(np.mean(group)),
+                            'std': self._serialize_for_json(np.std(group)),
                             'size': len(group)
                         } for name, group in groups.items()
                     },
@@ -459,8 +485,8 @@ class StatisticalTests:
                         results['post_hoc'] = {
                             'test': 'tukey_hsd',
                             'summary': str(tukey_results),
-                            'reject': tukey_results.reject.tolist(),
-                            'pvalues': tukey_results.pvalues.tolist()
+                            'reject': self._serialize_for_json(tukey_results.reject),
+                            'pvalues': self._serialize_for_json(tukey_results.pvalues)
                         }
                     except:
                         pass
@@ -497,9 +523,9 @@ class StatisticalTests:
                     for source in anova_table.index:
                         if source != 'Residual':
                             results['anova_table']['sources'].append(str(source))
-                            results['anova_table']['f_statistics'].append(float(anova_table.loc[source, 'F']))
-                            results['anova_table']['p_values'].append(float(anova_table.loc[source, 'PR(>F)']))
-                            results['anova_table']['degrees_of_freedom'].append(int(anova_table.loc[source, 'df']))
+                            results['anova_table']['f_statistics'].append(self._serialize_for_json(anova_table.loc[source, 'F']))
+                            results['anova_table']['p_values'].append(self._serialize_for_json(anova_table.loc[source, 'PR(>F)']))
+                            results['anova_table']['degrees_of_freedom'].append(self._serialize_for_json(anova_table.loc[source, 'df']))
                     
                     # Overall interpretation
                     significant_effects = [source for source, p_val in zip(results['anova_table']['sources'], results['anova_table']['p_values']) if p_val < 0.05]
@@ -523,12 +549,12 @@ class StatisticalTests:
                 analysis_type='anova',
                 analysis_name=f'{test_type.replace("_", " ").title()} ANOVA',
                 parameters={'dependent_var': dependent_var, 'independent_var': independent_var, 'independent_var2': independent_var2, 'test_type': test_type},
-                results=results
+                results=self._serialize_for_json(results)
             )
             db.session.add(analysis)
             db.session.commit()
             
-            return {'success': True, 'results': results}
+            return {'success': True, 'results': self._serialize_for_json(results)}
             
         except Exception as e:
             current_app.logger.error(f"ANOVA error: {str(e)}")
@@ -562,20 +588,20 @@ class StatisticalTests:
                     'column2': column2,
                     'null_hypothesis': f'{column1} and {column2} are independent',
                     'alternative_hypothesis': f'{column1} and {column2} are not independent',
-                    'chi2_statistic': float(chi2_stat),
-                    'p_value': float(p_value),
-                    'degrees_of_freedom': int(dof),
-                    'contingency_table': contingency_table.to_dict(),
-                    'expected_frequencies': expected.tolist(),
-                    'min_expected_frequency': float(min_expected),
-                    'assumption_met': min_expected >= 5,
+                    'chi2_statistic': self._serialize_for_json(chi2_stat),
+                    'p_value': self._serialize_for_json(p_value),
+                    'degrees_of_freedom': self._serialize_for_json(dof),
+                    'contingency_table': self._serialize_for_json(contingency_table.to_dict()),
+                    'expected_frequencies': self._serialize_for_json(expected),
+                    'min_expected_frequency': self._serialize_for_json(min_expected),
+                    'assumption_met': bool(min_expected >= 5),
                     'interpretation': self.interpret_p_value(p_value, 'reject null hypothesis of independence')
                 })
                 
                 # Calculate effect size (Cramér's V)
                 n = contingency_table.sum().sum()
                 cramers_v = np.sqrt(chi2_stat / (n * (min(contingency_table.shape) - 1)))
-                results['cramers_v'] = float(cramers_v)
+                results['cramers_v'] = self._serialize_for_json(cramers_v)
                 
             elif test_type == 'goodness_of_fit':
                 observed = df[column1].value_counts().sort_index()
@@ -586,11 +612,11 @@ class StatisticalTests:
                 results.update({
                     'null_hypothesis': f'{column1} follows uniform distribution',
                     'alternative_hypothesis': f'{column1} does not follow uniform distribution',
-                    'chi2_statistic': float(chi2_stat),
-                    'p_value': float(p_value),
+                    'chi2_statistic': self._serialize_for_json(chi2_stat),
+                    'p_value': self._serialize_for_json(p_value),
                     'degrees_of_freedom': len(observed) - 1,
-                    'observed_frequencies': observed.to_dict(),
-                    'expected_frequencies': dict(zip(observed.index, expected_equal)),
+                    'observed_frequencies': self._serialize_for_json(observed.to_dict()),
+                    'expected_frequencies': self._serialize_for_json(dict(zip(observed.index, expected_equal))),
                     'interpretation': self.interpret_p_value(p_value, 'reject null hypothesis of uniform distribution')
                 })
             
@@ -600,12 +626,12 @@ class StatisticalTests:
                 analysis_type='chi_square',
                 analysis_name=f'Chi-Square {test_type.replace("_", " ").title()} Test',
                 parameters={'column1': column1, 'column2': column2, 'test_type': test_type},
-                results=results
+                results=self._serialize_for_json(results)
             )
             db.session.add(analysis)
             db.session.commit()
             
-            return {'success': True, 'results': results}
+            return {'success': True, 'results': self._serialize_for_json(results)}
             
         except Exception as e:
             current_app.logger.error(f"Chi-square error: {str(e)}")
@@ -932,44 +958,58 @@ class StatisticalTests:
             if column not in df.columns or group_column not in df.columns:
                 return {'success': False, 'error': 'Required columns not found'}
             
+            # Remove rows with missing values in either column
+            clean_df = df[[column, group_column]].dropna()
+            
+            if len(clean_df) < 6:
+                return {'success': False, 'error': f'Insufficient data for Mann-Whitney U test. Only {len(clean_df)} complete observations available. At least 6 are required.'}
+            
             # Ensure data column is numeric
             try:
-                df[column] = pd.to_numeric(df[column], errors='coerce')
+                clean_df[column] = pd.to_numeric(clean_df[column], errors='coerce')
+                clean_df = clean_df.dropna()  # Remove rows that couldn't be converted
             except:
                 return {'success': False, 'error': f'Cannot convert column "{column}" to numeric data'}
             
-            groups = df.groupby(group_column)[column].apply(lambda x: x.dropna())
+            if len(clean_df) < 6:
+                return {'success': False, 'error': f'Insufficient numeric data for Mann-Whitney U test. Only {len(clean_df)} valid numeric observations available.'}
             
-            if len(groups) != 2:
-                return {'success': False, 'error': 'Exactly two groups required for Mann-Whitney U test'}
+            # Check unique values in group column
+            unique_groups = clean_df[group_column].unique()
             
-            group1, group2 = groups.iloc[0], groups.iloc[1]
-            group_names = list(groups.index)
+            if len(unique_groups) != 2:
+                return {'success': False, 'error': f'Exactly two groups required for Mann-Whitney U test. Found {len(unique_groups)} unique groups in column "{group_column}": {list(unique_groups)}'}
+            
+            # Group the data
+            group1_data = clean_df[clean_df[group_column] == unique_groups[0]][column]
+            group2_data = clean_df[clean_df[group_column] == unique_groups[1]][column]
             
             # Check if groups have enough data
-            if len(group1) < 3 or len(group2) < 3:
-                return {'success': False, 'error': 'Each group must have at least 3 observations for Mann-Whitney U test'}
+            if len(group1_data) < 3 or len(group2_data) < 3:
+                return {'success': False, 'error': f'Each group must have at least 3 observations for Mann-Whitney U test. Group sizes: {unique_groups[0]}={len(group1_data)}, {unique_groups[1]}={len(group2_data)}'}
             
-            statistic, p_value = stats.mannwhitneyu(group1, group2, alternative='two-sided')
+            statistic, p_value = stats.mannwhitneyu(group1_data, group2_data, alternative='two-sided')
             
             # Calculate effect size (rank-biserial correlation)
-            n1, n2 = len(group1), len(group2)
+            n1, n2 = len(group1_data), len(group2_data)
             effect_size = 1 - (2 * statistic) / (n1 * n2)
             
             results = {
                 'test_name': 'Mann-Whitney U test',
                 'column': column,
                 'group_column': group_column,
-                'group_names': group_names,
+                'group_names': [str(unique_groups[0]), str(unique_groups[1])],
                 'null_hypothesis': f'Distributions of {column} are identical between groups',
                 'alternative_hypothesis': f'Distributions of {column} differ between groups',
-                'u_statistic': float(statistic),
-                'p_value': float(p_value),
-                'effect_size': float(effect_size),
-                'group1_median': float(group1.median()),
-                'group2_median': float(group2.median()),
-                'group1_size': n1,
-                'group2_size': n2,
+                'u_statistic': self._serialize_for_json(statistic),
+                'p_value': self._serialize_for_json(p_value),
+                'effect_size': self._serialize_for_json(effect_size),
+                'group1_median': self._serialize_for_json(group1_data.median()),
+                'group2_median': self._serialize_for_json(group2_data.median()),
+                'group1_size': len(group1_data),
+                'group2_size': len(group2_data),
+                'group1_name': str(unique_groups[0]),
+                'group2_name': str(unique_groups[1]),
                 'interpretation': self.interpret_p_value(p_value, 'reject null hypothesis of identical distributions')
             }
             
@@ -979,12 +1019,12 @@ class StatisticalTests:
                 analysis_type='mann_whitney',
                 analysis_name='Mann-Whitney U Test',
                 parameters={'column': column, 'group_column': group_column},
-                results=results
+                results=self._serialize_for_json(results)
             )
             db.session.add(analysis)
             db.session.commit()
             
-            return {'success': True, 'results': results}
+            return {'success': True, 'results': self._serialize_for_json(results)}
             
         except Exception as e:
             current_app.logger.error(f"Mann-Whitney test error: {str(e)}")
