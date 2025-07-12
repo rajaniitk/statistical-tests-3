@@ -305,6 +305,11 @@ body.dark-theme .requirement-badge {
 }
 
 /* Tables Dark Theme */
+body.dark-theme .table-container {
+    background: var(--bg-primary);
+    border-color: #374151;
+}
+
 body.dark-theme .stats-table,
 body.dark-theme .results-table {
     background: var(--bg-primary);
@@ -325,6 +330,106 @@ body.dark-theme .results-table td {
 body.dark-theme .stats-table tr:hover,
 body.dark-theme .results-table tr:hover {
     background: var(--bg-secondary);
+}
+
+/* Correlation Matrix Dark Theme */
+body.dark-theme .correlation-matrix-container {
+    background: var(--bg-primary);
+    border-color: #374151;
+}
+
+body.dark-theme .correlation-matrix-container th {
+    background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+    color: #f9fafb;
+}
+
+body.dark-theme .correlation-matrix-container td {
+    border-color: #374151;
+    color: #d1d5db;
+}
+
+body.dark-theme .correlation-matrix-container td.first-column {
+    background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+    color: #f9fafb;
+}
+
+body.dark-theme .corr-value.neutral {
+    background: #4b5563;
+    color: #d1d5db;
+}
+
+/* Enhanced Content Areas Dark Theme */
+body.dark-theme .stats-summary .stat-card {
+    background: var(--bg-primary);
+    border-color: #4b5563;
+    color: #f9fafb;
+}
+
+body.dark-theme .stats-summary .stat-card h4 {
+    color: #9ca3af;
+}
+
+body.dark-theme .stats-summary .stat-card .value {
+    color: #f9fafb;
+}
+
+body.dark-theme .missing-values-display .missing-item {
+    background: var(--bg-primary);
+    border-color: #4b5563;
+    color: #f9fafb;
+}
+
+body.dark-theme .missing-values-display .missing-item .column-name {
+    color: #d1d5db;
+}
+
+body.dark-theme .missing-values-display .missing-item .missing-count {
+    color: #fca5a5;
+}
+
+body.dark-theme .missing-values-display .missing-item .missing-percentage {
+    color: #9ca3af;
+}
+
+body.dark-theme .data-types-display .type-item {
+    background: var(--bg-primary);
+    border-color: #4b5563;
+    color: #f9fafb;
+}
+
+body.dark-theme .data-types-display .type-item .column-name {
+    color: #d1d5db;
+}
+
+body.dark-theme .data-types-display .type-item .data-type {
+    color: #9ca3af;
+}
+
+/* Scroll indicators dark theme */
+body.dark-theme .table-container.has-horizontal-scroll::after {
+    background: rgba(255, 255, 255, 0.8);
+    color: #1f2937;
+}
+
+body.dark-theme .table-container.scrolled-left::before,
+body.dark-theme .table-container.scrolled-right::before {
+    background: #3b82f6;
+    color: white;
+}
+
+/* Enhanced table container dark theme */
+body.dark-theme .table-container {
+    background: var(--bg-primary);
+    border-color: #374151;
+}
+
+body.dark-theme .table-wrapper {
+    background: var(--bg-primary);
+    border-color: #374151;
+}
+
+body.dark-theme .scrollable-content {
+    border-color: #4b5563;
 }
 
 /* Charts Dark Theme */
