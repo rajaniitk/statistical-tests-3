@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('run-ttest').addEventListener('click', runTTest);
         
         // ANOVA
+        document.getElementById('anova-type').addEventListener('change', handleANOVATypeChange);
         document.getElementById('run-anova').addEventListener('click', runANOVA);
         
         // Chi-square tests
@@ -139,7 +140,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const selects = [
             'desc-columns', 'normality-column', 'corr-column1', 'corr-column2',
             'ttest-column', 'ttest-data-column', 'ttest-group-column', 'ttest-before', 'ttest-after',
-            'anova-dependent', 'anova-independent', 'chi-var1', 'chi-var2', 'chi-observed',
+            'anova-dependent', 'anova-independent', 'anova-independent2', 'chi-var1', 'chi-var2', 'chi-observed',
             'mw-data-column', 'mw-group-column', 'wilcoxon-col1', 'wilcoxon-col2',
             'kw-dependent', 'kw-independent', 'friedman-columns', 'variance-columns',
             'mcnemar-col1', 'mcnemar-col2', 'mc-dependent', 'mc-independent'
@@ -591,6 +592,17 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById(sectionId).style.display = 'block';
         }
     }
+
+    function handleANOVATypeChange() {
+        const anovaType = document.getElementById('anova-type').value;
+        const twoWayControls = document.getElementById('two-way-controls');
+        
+        if (anovaType === 'two_way') {
+            twoWayControls.classList.add('active');
+        } else {
+            twoWayControls.classList.remove('active');
+        }
+    }
     
     async function runTTest() {
         const testType = document.getElementById('ttest-type').value;
@@ -758,68 +770,93 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // For two-way ANOVA, check if second independent variable is selected
+        let independent2 = null;
+        if (anovaType === 'two_way') {
+            independent2 = document.getElementById('anova-independent2').value;
+            if (!independent2) {
+                showError('Please select the second independent variable for two-way ANOVA');
+                return;
+            }
+        }
+        
         showLoading('Running ANOVA...');
         
         try {
+            // Build request body
+            const requestBody = {
+                dataset_id: currentDatasetId,
+                dependent: dependent,
+                anova_type: anovaType
+            };
+            
+            // Add independent variables based on ANOVA type
+            if (anovaType === 'one_way') {
+                requestBody.independent = [independent];
+            } else if (anovaType === 'two_way') {
+                requestBody.independent = [independent, independent2];
+            }
+            
             // Run real ANOVA via API
             const response = await fetch('/api/statistical/anova', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    dataset_id: currentDatasetId,
-                    dependent: dependent,
-                    independent: [independent],  // Convert to array for backend compatibility
-                    anova_type: anovaType
-                })
+                body: JSON.stringify(requestBody)
             });
             
             const data = await response.json();
             
             if (data.success && data.result) {
-                displayANOVAResult(data.result, dependent, independent, anovaType);
+                displayANOVAResult(data.result, dependent, independent, anovaType, independent2);
             } else {
                 // Show the actual backend error message instead of generic one
                 const errorMessage = data.error || 'Failed to run ANOVA';
-                displayANOVAError(errorMessage, dependent, independent, anovaType);
+                displayANOVAError(errorMessage, dependent, independent, anovaType, independent2);
             }
             
         } catch (error) {
             console.error('Error running ANOVA:', error);
             // Handle network errors
             if (error.message.includes('HTTP error!')) {
-                displayANOVAError('Server error occurred. Please check your data and parameters.', dependent, independent, anovaType);
+                displayANOVAError('Server error occurred. Please check your data and parameters.', dependent, independent, anovaType, independent2);
             } else {
-                displayANOVAError('Network error: ' + error.message, dependent, independent, anovaType);
+                displayANOVAError('Network error: ' + error.message, dependent, independent, anovaType, independent2);
             }
         } finally {
             hideLoading();
         }
     }
     
-    function displayANOVAError(errorMessage, dependent, independent, anovaType) {
+    function displayANOVAError(errorMessage, dependent, independent, anovaType, independent2) {
         const container = document.getElementById('anova-results');
+        
+        let independentInfo = `<p><strong>Independent Variable:</strong> "${independent || 'Not selected'}"</p>`;
+        if (anovaType === 'two_way') {
+            independentInfo += `<p><strong>Second Independent Variable:</strong> "${independent2 || 'Not selected'}"</p>`;
+        }
         
         container.innerHTML = `
             <div class="test-result error">
                 <h4>ANOVA Error</h4>
                 <p><strong>Test Type:</strong> ${anovaType.replace('_', ' ').toUpperCase()}</p>
                 <p><strong>Dependent Variable:</strong> "${dependent || 'Not selected'}"</p>
-                <p><strong>Independent Variable:</strong> "${independent || 'Not selected'}"</p>
+                ${independentInfo}
                 <p><strong>Error:</strong> ${errorMessage}</p>
                 <div class="error-help">
                     <p><strong>Common solutions:</strong></p>
                     <ul>
-                        <li>Ensure both dependent and independent variables are selected</li>
+                        <li>Ensure all required variables are selected</li>
                         <li>Check that dependent variable contains numeric data</li>
-                        <li>Verify independent variable has 2+ groups with sufficient data</li>
+                        <li>Verify independent variables have 2+ groups with sufficient data</li>
+                        <li>For two-way ANOVA: select exactly 2 independent variables</li>
                         <li>Ensure at least 5 total observations for the test</li>
                         <li>Check for missing or invalid values</li>
                     </ul>
                     <p><strong>ANOVA requirements:</strong></p>
                     <ul>
-                        <li><strong>One-way:</strong> Numeric dependent variable + categorical independent variable with 2+ groups</li>
+                        <li><strong>One-way:</strong> Numeric dependent variable + 1 categorical independent variable with 2+ groups</li>
                         <li><strong>Two-way:</strong> Numeric dependent variable + 2 categorical independent variables</li>
                         <li><strong>Data:</strong> Minimum 5 observations total, at least 2 per group</li>
                     </ul>
@@ -828,7 +865,7 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
     }
     
-    function displayANOVAResult(result, dependent, independent, anovaType) {
+    function displayANOVAResult(result, dependent, independent, anovaType, independent2) {
         const container = document.getElementById('anova-results');
         
         // Safely handle undefined or null result
@@ -844,11 +881,45 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const isSignificant = result.p_value < 0.05;
         
-        const html = `
-            <div class="test-result ${isSignificant ? 'significant' : 'not-significant'}">
-                <h4>${anovaType.replace('_', '-').toUpperCase()} ANOVA Results</h4>
-                <p><strong>Dependent Variable:</strong> ${dependent}</p>
-                <p><strong>Independent Variable:</strong> ${independent}</p>
+        let independentInfo = `<p><strong>Independent Variable:</strong> ${independent}</p>`;
+        if (anovaType === 'two_way' && independent2) {
+            independentInfo += `<p><strong>Second Independent Variable:</strong> ${independent2}</p>`;
+        }
+        
+        // Handle two-way ANOVA results which may have multiple F-statistics
+        let statisticsHtml = '';
+        if (anovaType === 'two_way' && result.anova_table) {
+            // Two-way ANOVA has multiple sources
+            statisticsHtml = `
+                <div class="result-stats">
+                    <div class="stat-item">
+                        <strong>ANOVA Table:</strong>
+                        <table style="width: 100%; margin-top: 10px; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f0f0f0;">
+                                    <th style="padding: 8px; border: 1px solid #ddd;">Source</th>
+                                    <th style="padding: 8px; border: 1px solid #ddd;">F-statistic</th>
+                                    <th style="padding: 8px; border: 1px solid #ddd;">P-value</th>
+                                    <th style="padding: 8px; border: 1px solid #ddd;">df</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${result.anova_table.sources.map((source, index) => `
+                                    <tr>
+                                        <td style="padding: 8px; border: 1px solid #ddd;">${source}</td>
+                                        <td style="padding: 8px; border: 1px solid #ddd;">${safeFormat(result.anova_table.f_statistics[index])}</td>
+                                        <td style="padding: 8px; border: 1px solid #ddd;">${safeFormat(result.anova_table.p_values[index])}</td>
+                                        <td style="padding: 8px; border: 1px solid #ddd;">${result.anova_table.degrees_of_freedom[index] || 'N/A'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        } else {
+            // One-way ANOVA or fallback
+            statisticsHtml = `
                 <div class="result-stats">
                     <div class="stat-item">
                         <strong>F-statistic:</strong> ${safeFormat(result.f_statistic)}
@@ -859,13 +930,33 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="stat-item">
                         <strong>Degrees of Freedom:</strong> ${result.degrees_of_freedom ? (Array.isArray(result.degrees_of_freedom) ? result.degrees_of_freedom.join(', ') : result.degrees_of_freedom) : 'N/A'}
                     </div>
+                    ${result.eta_squared ? `
+                    <div class="stat-item">
+                        <strong>Effect Size (η²):</strong> ${safeFormat(result.eta_squared)}
+                    </div>
+                    ` : ''}
                 </div>
+            `;
+        }
+        
+        const html = `
+            <div class="test-result ${isSignificant ? 'significant' : 'not-significant'}">
+                <h4>${anovaType.replace('_', '-').toUpperCase()} ANOVA Results</h4>
+                <p><strong>Dependent Variable:</strong> ${dependent}</p>
+                ${independentInfo}
+                ${statisticsHtml}
                 <div class="conclusion">
                     <strong>Conclusion:</strong> 
-                    ${isSignificant ? 
+                    ${result.interpretation || (isSignificant ? 
                         'There is a statistically significant difference between groups.' : 
-                        'There is no statistically significant difference between groups.'}
+                        'There is no statistically significant difference between groups.')}
                 </div>
+                ${result.post_hoc ? `
+                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <h5>Post-hoc Analysis:</h5>
+                    <p>${result.post_hoc.test}: ${result.post_hoc.summary || 'Multiple comparisons performed'}</p>
+                </div>
+                ` : ''}
             </div>
         `;
         
