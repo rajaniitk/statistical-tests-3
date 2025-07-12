@@ -493,15 +493,61 @@ class StatisticalTests:
             
             elif test_type == 'two_way':
                 try:
+                    # Additional data cleaning for two-way ANOVA
+                    if independent_var2 not in df.columns:
+                        return {'success': False, 'error': f'Second independent variable "{independent_var2}" not found'}
+                    
+                    # Clean data more thoroughly for two-way ANOVA
+                    two_way_df = df[[dependent_var, independent_var, independent_var2]].copy()
+                    
+                    # Convert dependent variable to numeric and remove NaN/infinite values
+                    two_way_df[dependent_var] = pd.to_numeric(two_way_df[dependent_var], errors='coerce')
+                    
+                    # Remove rows with NaN or infinite values
+                    two_way_df = two_way_df.dropna()
+                    two_way_df = two_way_df[np.isfinite(two_way_df[dependent_var])]
+                    
+                    if len(two_way_df) < 10:
+                        return {'success': False, 'error': f'Insufficient clean data for two-way ANOVA. Only {len(two_way_df)} valid observations after cleaning. At least 10 are required.'}
+                    
+                    # Check that we have enough groups for each factor
+                    groups1 = two_way_df[independent_var].nunique()
+                    groups2 = two_way_df[independent_var2].nunique()
+                    
+                    if groups1 < 2:
+                        return {'success': False, 'error': f'First independent variable "{independent_var}" must have at least 2 groups. Found {groups1} groups.'}
+                    if groups2 < 2:
+                        return {'success': False, 'error': f'Second independent variable "{independent_var2}" must have at least 2 groups. Found {groups2} groups.'}
+                    
+                    # Check for sufficient observations per cell
+                    cell_counts = two_way_df.groupby([independent_var, independent_var2]).size()
+                    min_cell_count = cell_counts.min()
+                    
+                    if min_cell_count < 2:
+                        return {'success': False, 'error': f'Each combination of factors must have at least 2 observations. Minimum cell count: {min_cell_count}'}
+                    
                     # Two-way ANOVA using statsmodels
                     import statsmodels.api as sm
                     from statsmodels.formula.api import ols
                     
+                    # Create safe column names for formula
+                    safe_dep = dependent_var.replace(' ', '_').replace('-', '_')
+                    safe_ind1 = independent_var.replace(' ', '_').replace('-', '_')
+                    safe_ind2 = independent_var2.replace(' ', '_').replace('-', '_')
+                    
+                    # Rename columns temporarily for formula
+                    formula_df = two_way_df.copy()
+                    formula_df = formula_df.rename(columns={
+                        dependent_var: safe_dep,
+                        independent_var: safe_ind1,
+                        independent_var2: safe_ind2
+                    })
+                    
                     # Create formula for two-way ANOVA
-                    formula = f'Q("{dependent_var}") ~ C(Q("{independent_var}")) + C(Q("{independent_var2}")) + C(Q("{independent_var}")):C(Q("{independent_var2}"))'
+                    formula = f'{safe_dep} ~ C({safe_ind1}) + C({safe_ind2}) + C({safe_ind1}):C({safe_ind2})'
                     
                     # Fit the model
-                    model = ols(formula, data=clean_df).fit()
+                    model = ols(formula, data=formula_df).fit()
                     anova_table = sm.stats.anova_lm(model, typ=2)
                     
                     results = {
@@ -511,34 +557,64 @@ class StatisticalTests:
                         'independent_variable2': independent_var2,
                         'null_hypothesis': 'No main effects or interaction effects',
                         'alternative_hypothesis': 'At least one main effect or interaction effect exists',
+                        'sample_size': len(two_way_df),
+                        'groups_factor1': groups1,
+                        'groups_factor2': groups2,
+                        'min_cell_count': int(min_cell_count),
                         'anova_table': {
                             'sources': [],
                             'f_statistics': [],
                             'p_values': [],
-                            'degrees_of_freedom': []
+                            'degrees_of_freedom': [],
+                            'sum_squares': [],
+                            'mean_squares': []
                         }
                     }
                     
                     # Extract results from ANOVA table
                     for source in anova_table.index:
                         if source != 'Residual':
-                            results['anova_table']['sources'].append(str(source))
+                            source_name = str(source).replace(f'C({safe_ind1})', independent_var).replace(f'C({safe_ind2})', independent_var2)
+                            source_name = source_name.replace(':', ' × ')  # Make interaction more readable
+                            
+                            results['anova_table']['sources'].append(source_name)
                             results['anova_table']['f_statistics'].append(self._serialize_for_json(anova_table.loc[source, 'F']))
                             results['anova_table']['p_values'].append(self._serialize_for_json(anova_table.loc[source, 'PR(>F)']))
                             results['anova_table']['degrees_of_freedom'].append(self._serialize_for_json(anova_table.loc[source, 'df']))
+                            results['anova_table']['sum_squares'].append(self._serialize_for_json(anova_table.loc[source, 'sum_sq']))
+                            results['anova_table']['mean_squares'].append(self._serialize_for_json(anova_table.loc[source, 'sum_sq'] / anova_table.loc[source, 'df']))
                     
                     # Overall interpretation
-                    significant_effects = [source for source, p_val in zip(results['anova_table']['sources'], results['anova_table']['p_values']) if p_val < 0.05]
+                    significant_effects = []
+                    for i, (source, p_val) in enumerate(zip(results['anova_table']['sources'], results['anova_table']['p_values'])):
+                        if p_val is not None and p_val < 0.05:
+                            significant_effects.append(source)
                     
                     if significant_effects:
                         results['interpretation'] = f"Significant effects found for: {', '.join(significant_effects)}"
+                        results['significant_effects'] = significant_effects
                     else:
                         results['interpretation'] = "No significant main effects or interaction effects found"
+                        results['significant_effects'] = []
                     
-                    results['model_summary'] = str(model.summary())
+                    # Add overall model statistics
+                    results['model_r_squared'] = self._serialize_for_json(model.rsquared)
+                    results['model_adj_r_squared'] = self._serialize_for_json(model.rsquared_adj)
+                    results['model_f_statistic'] = self._serialize_for_json(model.fvalue)
+                    results['model_f_pvalue'] = self._serialize_for_json(model.f_pvalue)
+                    
+                    # Add descriptive statistics by groups
+                    results['group_statistics'] = {}
+                    for (group1, group2), group_data in two_way_df.groupby([independent_var, independent_var2]):
+                        key = f"{group1} × {group2}"
+                        results['group_statistics'][key] = {
+                            'mean': self._serialize_for_json(group_data[dependent_var].mean()),
+                            'std': self._serialize_for_json(group_data[dependent_var].std()),
+                            'count': len(group_data)
+                        }
                     
                 except Exception as e:
-                    return {'success': False, 'error': f'Two-way ANOVA failed: {str(e)}. Make sure statsmodels is installed and data is properly formatted.'}
+                    return {'success': False, 'error': f'Two-way ANOVA failed: {str(e)}. Please ensure data is clean and properly formatted.'}
             
             else:
                 return {'success': False, 'error': f'Test type {test_type} not implemented'}
