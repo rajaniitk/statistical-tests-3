@@ -1168,9 +1168,9 @@ class StatisticalTests:
                             post_hoc_results.append({
                                 'group1': str(group_names[i]),
                                 'group2': str(group_names[j]),
-                                'u_statistic': float(stat),
-                                'p_value': float(p),
-                                'significant': p < 0.05
+                                'u_statistic': self._serialize_for_json(stat),
+                                'p_value': self._serialize_for_json(p),
+                                'significant': bool(p < 0.05)
                             })
                         except:
                             pass
