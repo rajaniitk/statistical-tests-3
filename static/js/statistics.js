@@ -1361,19 +1361,27 @@ document.addEventListener('DOMContentLoaded', function() {
         showLoading('Running chi-square test...');
         
         try {
+            // Prepare request data based on test type
+            let requestData = {
+                dataset_id: currentDatasetId,
+                test_type: testType
+            };
+            
+            if (testType === 'independence') {
+                requestData.var1 = document.getElementById('chi-var1').value;
+                requestData.var2 = document.getElementById('chi-var2').value;
+            } else if (testType === 'goodness_of_fit') {
+                requestData.var1 = document.getElementById('chi-observed').value;
+                requestData.var2 = null; // Not needed for goodness of fit
+            }
+            
             // Run real chi-square test via API
             const response = await fetch('/api/statistical/chi_square', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    dataset_id: currentDatasetId,
-                    test_type: testType,
-                    var1: document.getElementById('chi-var1').value,
-                    var2: document.getElementById('chi-var2').value,
-                    observed: document.getElementById('chi-observed').value
-                })
+                body: JSON.stringify(requestData)
             });
             
             const data = await response.json();
@@ -1741,30 +1749,183 @@ document.addEventListener('DOMContentLoaded', function() {
         const isSignificant = result.p_value < 0.05;
         const testName = testType.replace('_', ' ').toUpperCase() + ' Test';
         
+        // Get the appropriate test statistic
+        const testStatistic = result.test_statistic || result.statistic || result.h_statistic || result.u_statistic || result.chi2_statistic;
+        
+        // Build comprehensive non-parametric test result display
         let html = `
-            <div class="test-result ${isSignificant ? 'significant' : 'not-significant'}">
-                <h4>${testName} Results</h4>
-                <div class="result-stats">
-                    <div class="stat-item">
-                        <strong>Test Statistic:</strong> ${safeFormat(result.test_statistic || result.statistic || result.h_statistic || result.u_statistic || result.chi2_statistic)}
+            <div style="background: white; border: 3px solid #007cba; border-radius: 15px; padding: 0; margin: 20px 0; overflow: hidden; box-shadow: 0 8px 25px rgba(0,124,186,0.15);">
+                
+                <!-- Header Section -->
+                <div style="background: linear-gradient(135deg, #007cba 0%, #005580 50%, #003d5c 100%); padding: 25px 30px; color: white; position: relative; overflow: hidden;">
+                    <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: rgba(255,255,255,0.1); border-radius: 50%; transform: rotate(45deg);"></div>
+                    <div style="position: relative; z-index: 2;">
+                        <h3 style="margin: 0 0 10px 0; font-size: 24px; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
+                            📊 ${testName} Results
+                        </h3>
+                        <div style="background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); border-radius: 20px; padding: 8px 16px; display: inline-block;">
+                            <span style="font-size: 14px; font-weight: bold;">${isSignificant ? '✅ SIGNIFICANT' : '❌ NOT SIGNIFICANT'}</span>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <strong>P-value:</strong> ${safeFormat(result.p_value)}
-                    </div>
-                    <div class="stat-item">
-                        <strong>Sample Size:</strong> ${result.sample_size || (result.group1_size && result.group2_size ? result.group1_size + result.group2_size : 'N/A')}
-                    </div>
-                    ${result.effect_size ? `
-                    <div class="stat-item">
-                        <strong>Effect Size:</strong> ${safeFormat(result.effect_size)}
-                    </div>
-                    ` : ''}
                 </div>
-                <div class="conclusion">
-                    <strong>Conclusion:</strong> ${result.interpretation || 
-                        (isSignificant ? 
-                            'Result is statistically significant (p < 0.05)' : 
-                            'Result is not statistically significant (p ≥ 0.05)')}
+
+                <!-- Main Content -->
+                <div style="padding: 25px;">
+                    
+                    <!-- Test Information -->
+                    <div style="background: #f0f8ff; border: 2px solid #007cba; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: #005580; margin: 0 0 15px 0; font-size: 18px;">📋 Test Information</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #007cba;">
+                                <strong style="color: #005580;">Test Type:</strong><br>
+                                <span style="font-size: 16px; color: #333;">${testName}</span>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #ff9800;">
+                                <strong style="color: #e65100;">Method:</strong><br>
+                                <span style="font-size: 16px; color: #333;">Non-parametric</span>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #4caf50;">
+                                <strong style="color: #2e7d32;">Sample Size:</strong><br>
+                                <span style="font-size: 16px; color: #333;">${result.sample_size || (result.group1_size && result.group2_size ? result.group1_size + result.group2_size : 'N/A')}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Test Statistics -->
+                    <div style="background: ${isSignificant ? '#e8f5e8' : '#fff3e0'}; border: 2px solid ${isSignificant ? '#4caf50' : '#ff9800'}; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: ${isSignificant ? '#2e7d32' : '#f57c00'}; margin: 0 0 15px 0; font-size: 18px;">📊 Test Statistics</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #2196f3;">
+                                <div style="font-size: 28px; font-weight: bold; color: #1976d2;">${safeFormat(testStatistic)}</div>
+                                <div style="color: #666; font-size: 14px;">${testType === 'mann_whitney' ? 'U-statistic' : 
+                                    testType === 'wilcoxon' ? 'W-statistic' :
+                                    testType === 'kruskal_wallis' ? 'H-statistic' :
+                                    testType === 'friedman' ? 'χ²-statistic' : 'Test Statistic'}</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #ff5722;">
+                                <div style="font-size: 28px; font-weight: bold; color: #d84315;">${safeFormat(result.p_value)}</div>
+                                <div style="color: #666; font-size: 14px;">P-value</div>
+                            </div>
+                            ${result.effect_size ? `
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #607d8b;">
+                                <div style="font-size: 28px; font-weight: bold; color: #455a64;">${safeFormat(result.effect_size, 3)}</div>
+                                <div style="color: #666; font-size: 14px;">Effect Size</div>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+        `;
+
+        // Group Statistics (if available)
+        if (result.group_statistics && Object.keys(result.group_statistics).length > 0) {
+            html += `
+                    <!-- Group Statistics -->
+                    <div style="background: #e0f2f1; border: 2px solid #4caf50; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: #2e7d32; margin: 0 0 15px 0; font-size: 18px;">👥 Group Statistics</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                            ${Object.entries(result.group_statistics).map(([group, stats]) => `
+                                <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #4caf50;">
+                                    <div style="font-weight: bold; color: #2e7d32; margin-bottom: 10px; font-size: 16px;">${group}</div>
+                                    <div style="margin: 5px 0;"><strong>Median:</strong> ${safeFormat(stats.median)}</div>
+                                    ${stats.mean_rank ? `<div style="margin: 5px 0;"><strong>Mean Rank:</strong> ${safeFormat(stats.mean_rank)}</div>` : ''}
+                                    <div style="margin: 5px 0;"><strong>Size:</strong> ${stats.size}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+            `;
+        }
+
+        // Post-hoc Analysis (if available)
+        if (result.post_hoc && result.post_hoc.length > 0) {
+            html += `
+                    <!-- Post-hoc Analysis -->
+                    <div style="background: #e3f2fd; border: 2px solid #2196f3; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: #1976d2; margin: 0 0 15px 0; font-size: 18px;">🔍 Post-hoc Pairwise Comparisons</h4>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                <thead>
+                                    <tr style="background: linear-gradient(135deg, #2196f3, #1976d2); color: white;">
+                                        <th style="padding: 12px; font-weight: bold; text-align: left;">Group 1</th>
+                                        <th style="padding: 12px; font-weight: bold; text-align: left;">Group 2</th>
+                                        <th style="padding: 12px; font-weight: bold; text-align: center;">U-statistic</th>
+                                        <th style="padding: 12px; font-weight: bold; text-align: center;">P-value</th>
+                                        <th style="padding: 12px; font-weight: bold; text-align: center;">Significant</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${result.post_hoc.map(comparison => `
+                                        <tr style="border-bottom: 1px solid #e0e0e0;">
+                                            <td style="padding: 12px; font-weight: bold;">${comparison.group1}</td>
+                                            <td style="padding: 12px; font-weight: bold;">${comparison.group2}</td>
+                                            <td style="padding: 12px; text-align: center;">${safeFormat(comparison.u_statistic)}</td>
+                                            <td style="padding: 12px; text-align: center;">${safeFormat(comparison.p_value)}</td>
+                                            <td style="padding: 12px; text-align: center;">
+                                                <span style="background: ${comparison.significant ? '#4caf50' : '#ff9800'}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold;">
+                                                    ${comparison.significant ? '✅ Yes' : '❌ No'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+            `;
+        }
+
+        // Comprehensive Conclusion
+        let detailedConclusion = '';
+        if (isSignificant) {
+            detailedConclusion = `
+                <strong>✅ Statistically Significant Result:</strong>
+                <p>The ${testName} indicates a statistically significant difference (p = ${safeFormat(result.p_value)} < 0.05). This means:</p>
+                <ul>
+                    <li>✅ The null hypothesis is rejected</li>
+                    <li>✅ There is evidence of a true difference between groups/conditions</li>
+                    <li>✅ The effect is unlikely due to random chance</li>
+                    <li>📊 Non-parametric approach was appropriate for this data</li>
+                </ul>
+            `;
+        } else {
+            detailedConclusion = `
+                <strong>❌ Not Statistically Significant:</strong>
+                <p>The ${testName} does not show a statistically significant difference (p = ${safeFormat(result.p_value)} ≥ 0.05). This means:</p>
+                <ul>
+                    <li>❌ We fail to reject the null hypothesis</li>
+                    <li>❌ Insufficient evidence of a true difference</li>
+                    <li>❌ The observed difference could be due to random chance</li>
+                    <li>📊 Consider larger sample sizes or different approaches</li>
+                </ul>
+            `;
+        }
+
+        html += `
+                    <!-- Conclusion Section -->
+                    <div style="background: ${isSignificant ? '#e8f5e8' : '#fff3e0'}; border: 2px solid ${isSignificant ? '#4caf50' : '#ff9800'}; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: ${isSignificant ? '#2e7d32' : '#f57c00'}; margin: 0 0 15px 0; font-size: 18px;">🎯 Conclusion & Interpretation</h4>
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid ${isSignificant ? '#4caf50' : '#ff9800'};">
+                            <div style="font-size: 16px; line-height: 1.6; color: #333;">
+                                ${detailedConclusion}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hypotheses Section -->
+                    <div style="background: #e3f2fd; border: 2px solid #2196f3; border-radius: 10px; padding: 20px;">
+                        <h4 style="color: #1976d2; margin: 0 0 15px 0; font-size: 18px;">📝 Statistical Hypotheses</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #2196f3;">
+                                <div style="font-weight: bold; color: #1976d2; margin-bottom: 8px;">Null Hypothesis (H₀):</div>
+                                <div style="color: #333; font-size: 14px;">${result.null_hypothesis || 'No difference between groups/conditions'}</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #ff5722;">
+                                <div style="font-weight: bold; color: #d84315; margin-bottom: 8px;">Alternative Hypothesis (H₁):</div>
+                                <div style="color: #333; font-size: 14px;">${result.alternative_hypothesis || 'There is a difference between groups/conditions'}</div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         `;
@@ -1821,27 +1982,120 @@ document.addEventListener('DOMContentLoaded', function() {
         const container = document.getElementById('variance-results');
         
         const isSignificant = result.p_value < 0.05;
-        const testName = testType.toUpperCase() + ' Test';
+        const testName = testType.toUpperCase() + ' Variance Test';
         
-        const html = `
-            <div class="test-result ${isSignificant ? 'significant' : 'not-significant'}">
-                <h4>${testName} Results</h4>
-                <div class="result-stats">
-                    <div class="stat-item">
-                        <strong>Test Statistic:</strong> ${safeFormat(result.test_statistic)}
-                    </div>
-                    <div class="stat-item">
-                        <strong>P-value:</strong> ${safeFormat(result.p_value)}
-                    </div>
-                    <div class="stat-item">
-                        <strong>Degrees of Freedom:</strong> ${result.degrees_of_freedom || 'N/A'}
+        // Build comprehensive variance test result display
+        let html = `
+            <div style="background: white; border: 3px solid #007cba; border-radius: 15px; padding: 0; margin: 20px 0; overflow: hidden; box-shadow: 0 8px 25px rgba(0,124,186,0.15);">
+                
+                <!-- Header Section -->
+                <div style="background: linear-gradient(135deg, #007cba 0%, #005580 50%, #003d5c 100%); padding: 25px 30px; color: white; position: relative; overflow: hidden;">
+                    <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: rgba(255,255,255,0.1); border-radius: 50%; transform: rotate(45deg);"></div>
+                    <div style="position: relative; z-index: 2;">
+                        <h3 style="margin: 0 0 10px 0; font-size: 24px; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
+                            📊 ${testName} Results
+                        </h3>
+                        <div style="background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); border-radius: 20px; padding: 8px 16px; display: inline-block;">
+                            <span style="font-size: 14px; font-weight: bold;">${isSignificant ? '✅ UNEQUAL VARIANCES' : '❌ EQUAL VARIANCES'}</span>
+                        </div>
                     </div>
                 </div>
-                <div class="conclusion">
-                    <strong>Conclusion:</strong> ${result.interpretation || 
-                        (isSignificant ? 
-                            'Variances are significantly different' : 
-                            'Variances are not significantly different')}
+
+                <!-- Main Content -->
+                <div style="padding: 25px;">
+                    
+                    <!-- Test Information -->
+                    <div style="background: #f0f8ff; border: 2px solid #007cba; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: #005580; margin: 0 0 15px 0; font-size: 18px;">📋 Test Information</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #007cba;">
+                                <strong style="color: #005580;">Test Type:</strong><br>
+                                <span style="font-size: 16px; color: #333;">${testName}</span>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #ff9800;">
+                                <strong style="color: #e65100;">Purpose:</strong><br>
+                                <span style="font-size: 16px; color: #333;">Test for Equal Variances</span>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #4caf50;">
+                                <strong style="color: #2e7d32;">Groups:</strong><br>
+                                <span style="font-size: 16px; color: #333;">${result.columns ? result.columns.length : 'N/A'} variables</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Test Statistics -->
+                    <div style="background: ${isSignificant ? '#fff3e0' : '#e8f5e8'}; border: 2px solid ${isSignificant ? '#ff9800' : '#4caf50'}; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: ${isSignificant ? '#f57c00' : '#2e7d32'}; margin: 0 0 15px 0; font-size: 18px;">📊 Test Statistics</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #2196f3;">
+                                <div style="font-size: 28px; font-weight: bold; color: #1976d2;">${safeFormat(result.test_statistic)}</div>
+                                <div style="color: #666; font-size: 14px;">Test Statistic</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #ff5722;">
+                                <div style="font-size: 28px; font-weight: bold; color: #d84315;">${safeFormat(result.p_value)}</div>
+                                <div style="color: #666; font-size: 14px;">P-value</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #9c27b0;">
+                                <div style="font-size: 28px; font-weight: bold; color: #7b1fa2;">${result.degrees_of_freedom || 'N/A'}</div>
+                                <div style="color: #666; font-size: 14px;">Degrees of Freedom</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Group Statistics -->
+                    ${result.group_statistics ? `
+                    <div style="background: #e0f2f1; border: 2px solid #4caf50; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: #2e7d32; margin: 0 0 15px 0; font-size: 18px;">📈 Group Statistics</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            ${Object.entries(result.group_statistics).map(([group, stats]) => `
+                                <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #4caf50;">
+                                    <div style="font-weight: bold; color: #2e7d32; margin-bottom: 10px; font-size: 16px;">${group}</div>
+                                    <div style="margin: 5px 0;"><strong>Variance:</strong> ${safeFormat(stats.variance)}</div>
+                                    <div style="margin: 5px 0;"><strong>Std Dev:</strong> ${safeFormat(stats.std)}</div>
+                                    <div style="margin: 5px 0;"><strong>Mean:</strong> ${safeFormat(stats.mean)}</div>
+                                    <div style="margin: 5px 0;"><strong>Size:</strong> ${stats.size}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <!-- Conclusion Section -->
+                    <div style="background: ${isSignificant ? '#fff3e0' : '#e8f5e8'}; border: 2px solid ${isSignificant ? '#ff9800' : '#4caf50'}; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: ${isSignificant ? '#f57c00' : '#2e7d32'}; margin: 0 0 15px 0; font-size: 18px;">🎯 Conclusion</h4>
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid ${isSignificant ? '#ff9800' : '#4caf50'};">
+                            <p style="margin: 0; font-size: 16px; line-height: 1.5; color: #333;">
+                                <strong>${result.interpretation || 
+                                    (isSignificant ? 
+                                        'The variances are significantly different between groups.' : 
+                                        'The variances are not significantly different between groups.')}</strong>
+                            </p>
+                            <div style="margin-top: 15px; padding: 10px; background: ${isSignificant ? '#fff3e0' : '#e8f5e8'}; border-radius: 8px;">
+                                <p style="margin: 0; font-size: 14px; color: #666;">
+                                    <strong>Implication:</strong> 
+                                    ${isSignificant ? 
+                                        'Equal variance assumptions for parametric tests may be violated. Consider using robust methods or data transformation.' : 
+                                        'Equal variance assumptions are met. Parametric tests requiring equal variances are appropriate.'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hypotheses Section -->
+                    <div style="background: #e3f2fd; border: 2px solid #2196f3; border-radius: 10px; padding: 20px;">
+                        <h4 style="color: #1976d2; margin: 0 0 15px 0; font-size: 18px;">📝 Hypotheses</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #2196f3;">
+                                <div style="font-weight: bold; color: #1976d2; margin-bottom: 8px;">Null Hypothesis (H₀):</div>
+                                <div style="color: #333; font-size: 14px;">All groups have equal variances</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #ff5722;">
+                                <div style="font-weight: bold; color: #d84315; margin-bottom: 8px;">Alternative Hypothesis (H₁):</div>
+                                <div style="color: #333; font-size: 14px;">At least one group has different variance</div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         `;

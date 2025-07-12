@@ -1139,14 +1139,14 @@ class StatisticalTests:
                 'independent_variable': independent_var,
                 'null_hypothesis': f'All groups have the same distribution of {dependent_var}',
                 'alternative_hypothesis': f'At least one group has a different distribution of {dependent_var}',
-                'h_statistic': float(statistic),
-                'p_value': float(p_value),
+                'h_statistic': self._serialize_for_json(statistic),
+                'p_value': self._serialize_for_json(p_value),
                 'degrees_of_freedom': len(groups) - 1,
-                'eta_squared': float(eta_squared),
+                'eta_squared': self._serialize_for_json(eta_squared),
                 'group_statistics': {
                     str(name): {
-                        'median': float(np.median(group)),
-                        'mean_rank': float(np.mean(stats.rankdata(np.concatenate(groups))[
+                        'median': self._serialize_for_json(np.median(group)),
+                        'mean_rank': self._serialize_for_json(np.mean(stats.rankdata(np.concatenate(groups))[
                             sum(len(groups[i]) for i in range(idx)):
                             sum(len(groups[i]) for i in range(idx)) + len(group)
                         ])),
