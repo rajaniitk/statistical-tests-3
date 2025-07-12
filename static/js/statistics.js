@@ -539,32 +539,133 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        const strength = Math.abs(result.correlation);
+        const correlation = result.correlation_coefficient || result.correlation;
+        const strength = Math.abs(correlation);
         let strengthText = 'weak';
-        if (strength > 0.7) strengthText = 'strong';
-        else if (strength > 0.3) strengthText = 'moderate';
+        let strengthColor = '#ff9800';
+        if (strength > 0.7) {
+            strengthText = 'strong';
+            strengthColor = '#4caf50';
+        } else if (strength > 0.3) {
+            strengthText = 'moderate';
+            strengthColor = '#2196f3';
+        }
         
-        const direction = result.correlation > 0 ? 'positive' : 'negative';
+        const direction = correlation > 0 ? 'positive' : 'negative';
+        const isSignificant = result.p_value && result.p_value < 0.05;
         
-        const html = `
-            <div class="test-result correlation">
-                <h4>${method.toUpperCase()} Correlation: "${column1}" vs "${column2}"</h4>
-                <div class="result-stats">
-                    <div class="stat-item">
-                        <strong>Correlation Coefficient:</strong> ${result.correlation.toFixed(4)}
-                    </div>
-                    <div class="stat-item">
-                        <strong>P-value:</strong> ${result.p_value && typeof result.p_value === 'number' ? result.p_value.toFixed(4) : 'N/A'}
-                    </div>
-                    <div class="stat-item">
-                        <strong>Sample Size:</strong> ${result.sample_size || 'N/A'}
+        // Build comprehensive correlation result display
+        let html = `
+            <div style="background: white; border: 3px solid #007cba; border-radius: 15px; padding: 0; margin: 20px 0; overflow: hidden; box-shadow: 0 8px 25px rgba(0,124,186,0.15);">
+                
+                <!-- Header Section -->
+                <div style="background: linear-gradient(135deg, #007cba 0%, #005580 50%, #003d5c 100%); padding: 25px 30px; color: white; position: relative; overflow: hidden;">
+                    <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: rgba(255,255,255,0.1); border-radius: 50%; transform: rotate(45deg);"></div>
+                    <div style="position: relative; z-index: 2;">
+                        <h3 style="margin: 0 0 10px 0; font-size: 24px; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
+                            📈 ${method.toUpperCase()} Correlation Analysis
+                        </h3>
+                        <div style="background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); border-radius: 20px; padding: 8px 16px; display: inline-block;">
+                            <span style="font-size: 14px; font-weight: bold;">${isSignificant ? '✅ SIGNIFICANT' : '❌ NOT SIGNIFICANT'}</span>
+                        </div>
                     </div>
                 </div>
-                <div class="conclusion">
-                    <strong>Interpretation:</strong> There is a ${strengthText} ${direction} correlation between ${column1} and ${column2}.
-                    ${result.p_value && result.p_value < 0.05 ? 
-                        ' The correlation is statistically significant.' : 
-                        ' The correlation is not statistically significant.'}
+
+                <!-- Main Content -->
+                <div style="padding: 25px;">
+                    
+                    <!-- Variables Section -->
+                    <div style="background: #f0f8ff; border: 2px solid #007cba; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: #005580; margin: 0 0 15px 0; font-size: 18px;">📋 Variables</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #007cba;">
+                                <strong style="color: #005580;">Variable 1:</strong><br>
+                                <span style="font-size: 16px; color: #333;">${column1}</span>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #ff9800;">
+                                <strong style="color: #e65100;">Variable 2:</strong><br>
+                                <span style="font-size: 16px; color: #333;">${column2}</span>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #4caf50;">
+                                <strong style="color: #2e7d32;">Method:</strong><br>
+                                <span style="font-size: 16px; color: #333;">${method.toUpperCase()}</span>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #9c27b0;">
+                                <strong style="color: #7b1fa2;">Sample Size:</strong><br>
+                                <span style="font-size: 16px; color: #333;">${result.sample_size || 'N/A'}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Correlation Statistics -->
+                    <div style="background: ${isSignificant ? '#e8f5e8' : '#fff3e0'}; border: 2px solid ${isSignificant ? '#4caf50' : '#ff9800'}; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: ${isSignificant ? '#2e7d32' : '#f57c00'}; margin: 0 0 15px 0; font-size: 18px;">📊 Correlation Statistics</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid ${strengthColor};">
+                                <div style="font-size: 36px; font-weight: bold; color: ${strengthColor};">${safeFormat(correlation, 4)}</div>
+                                <div style="color: #666; font-size: 14px;">Correlation Coefficient</div>
+                                <div style="color: ${strengthColor}; font-size: 12px; font-weight: bold; margin-top: 5px;">${strengthText.toUpperCase()}</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #ff5722;">
+                                <div style="font-size: 28px; font-weight: bold; color: #d84315;">${safeFormat(result.p_value)}</div>
+                                <div style="color: #666; font-size: 14px;">P-value</div>
+                            </div>
+                            ${result.confidence_interval_95 ? `
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #2196f3;">
+                                <div style="font-size: 18px; font-weight: bold; color: #1976d2;">[${safeFormat(result.confidence_interval_95[0], 3)}, ${safeFormat(result.confidence_interval_95[1], 3)}]</div>
+                                <div style="color: #666; font-size: 14px;">95% Confidence Interval</div>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <!-- Interpretation Section -->
+                    <div style="background: #e3f2fd; border: 2px solid #2196f3; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: #1976d2; margin: 0 0 15px 0; font-size: 18px;">📝 Interpretation</h4>
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #2196f3;">
+                            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                                <div style="background: ${strengthColor}; color: white; padding: 8px 12px; border-radius: 15px; font-weight: bold; font-size: 14px;">
+                                    ${strengthText.toUpperCase()} ${direction.toUpperCase()}
+                                </div>
+                                <div style="background: ${isSignificant ? '#4caf50' : '#ff9800'}; color: white; padding: 8px 12px; border-radius: 15px; font-weight: bold; font-size: 14px;">
+                                    ${isSignificant ? 'SIGNIFICANT' : 'NOT SIGNIFICANT'}
+                                </div>
+                            </div>
+                            <p style="margin: 10px 0; color: #333; font-size: 16px; line-height: 1.5;">
+                                <strong>There is a ${strengthText} ${direction} correlation between "${column1}" and "${column2}"</strong> 
+                                (r = ${safeFormat(correlation, 4)}, p = ${safeFormat(result.p_value)}).
+                            </p>
+                            <div style="background: #f5f5f5; padding: 10px; border-radius: 8px; margin-top: 10px;">
+                                <p style="margin: 0; color: #666; font-size: 14px;">
+                                    <strong>Practical Meaning:</strong> 
+                                    ${strength > 0.7 ? 'Strong relationship - changes in one variable are closely associated with changes in the other.' :
+                                      strength > 0.3 ? 'Moderate relationship - there is a noticeable association between the variables.' :
+                                      'Weak relationship - the variables have little linear association.'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Statistical Decision -->
+                    <div style="background: ${isSignificant ? '#e8f5e8' : '#fff3e0'}; border: 2px solid ${isSignificant ? '#4caf50' : '#ff9800'}; border-radius: 10px; padding: 20px;">
+                        <h4 style="color: ${isSignificant ? '#2e7d32' : '#f57c00'}; margin: 0 0 15px 0; font-size: 18px;">🎯 Statistical Decision</h4>
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid ${isSignificant ? '#4caf50' : '#ff9800'};">
+                            <p style="margin: 0; font-size: 16px; line-height: 1.5; color: #333;">
+                                <strong>${isSignificant ? 
+                                    'The correlation is statistically significant.' : 
+                                    'The correlation is not statistically significant.'}</strong>
+                            </p>
+                            <div style="margin-top: 15px; padding: 10px; background: ${isSignificant ? '#e8f5e8' : '#fff3e0'}; border-radius: 8px;">
+                                <p style="margin: 0; font-size: 14px; color: #666;">
+                                    <strong>Decision:</strong> 
+                                    ${isSignificant ? 
+                                        `p-value (${safeFormat(result.p_value)}) < 0.05 → Reject H₀ (no correlation)` : 
+                                        `p-value (${safeFormat(result.p_value)}) ≥ 0.05 → Fail to reject H₀ (no correlation)`}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         `;
