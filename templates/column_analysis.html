@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Column Analysis{% endblock %}
+
+{% block header_title %}Column Analysis{% endblock %}
+
+{% block content %}
+<div class="column-analysis-container">
+    <div class="dashboard-header">
+        <h2>Column Analysis</h2>
+        <p>Detailed analysis of individual columns in your dataset</p>
+    </div>
+
+    <div class="dataset-selector">
+        <div class="form-group">
+            <label for="column-dataset-select">Select Dataset:</label>
+            <select id="column-dataset-select" class="form-control">
+                <option value="">Choose a dataset...</option>
+            </select>
+        </div>
+        <button id="refresh-column-datasets" class="btn btn-secondary">Refresh</button>
+    </div>
+
+    <div class="column-selector" id="column-selector" style="display: none;">
+        <div class="form-group">
+            <label for="column-select">Select Column:</label>
+            <select id="column-select" class="form-control">
+                <option value="">Choose a column...</option>
+            </select>
+        </div>
+        <button id="analyze-column" class="btn btn-primary">Analyze Column</button>
+    </div>
+
+    <div class="column-overview" id="column-overview" style="display: none;">
+        <h3>Column Overview</h3>
+        <div class="overview-cards">
+            <div class="overview-card">
+                <h4>Column Name</h4>
+                <span id="column-name">-</span>
+            </div>
+            <div class="overview-card">
+                <h4>Data Type</h4>
+                <span id="column-type">-</span>
+            </div>
+            <div class="overview-card">
+                <h4>Non-Null Count</h4>
+                <span id="non-null-count">-</span>
+            </div>
+            <div class="overview-card">
+                <h4>Missing Values</h4>
+                <span id="missing-values">-</span>
+            </div>
+            <div class="overview-card">
+                <h4>Unique Values</h4>
+                <span id="unique-values">-</span>
+            </div>
+            <div class="overview-card">
+                <h4>Memory Usage</h4>
+                <span id="memory-usage">-</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="analysis-tabs" id="analysis-tabs" style="display: none;">
+        <div class="tab-buttons">
+            <button class="tab-button active" data-tab="basic-stats">Basic Statistics</button>
+            <button class="tab-button" data-tab="distribution">Distribution</button>
+            <button class="tab-button" data-tab="patterns">Patterns</button>
+            <button class="tab-button" data-tab="quality">Data Quality</button>
+            <button class="tab-button" data-tab="relationships">Relationships</button>
+        </div>
+
+        <!-- Basic Statistics Tab -->
+        <div id="basic-stats" class="tab-content active">
+            <h4>Descriptive Statistics</h4>
+            <div id="basic-stats-content" class="stats-content">
+                <!-- Basic statistics will be populated here -->
+            </div>
+        </div>
+
+        <!-- Distribution Tab -->
+        <div id="distribution" class="tab-content">
+            <h4>Value Distribution</h4>
+            <div class="distribution-controls">
+                <button id="show-histogram" class="btn btn-secondary">Histogram</button>
+                <button id="show-boxplot" class="btn btn-secondary">Box Plot</button>
+                <button id="show-value-counts" class="btn btn-secondary">Value Counts</button>
+            </div>
+            <div id="distribution-content" class="chart-content">
+                <!-- Distribution charts will be displayed here -->
+            </div>
+        </div>
+
+        <!-- Patterns Tab -->
+        <div id="patterns" class="tab-content">
+            <h4>Data Patterns</h4>
+            <div class="patterns-analysis">
+                <div class="pattern-section">
+                    <h5>Value Patterns</h5>
+                    <div id="value-patterns">
+                        <!-- Value patterns will be displayed here -->
+                    </div>
+                </div>
+                <div class="pattern-section">
+                    <h5>Outlier Detection</h5>
+                    <div id="outlier-detection">
+                        <!-- Outlier information will be displayed here -->
+                    </div>
+                </div>
+                <div class="pattern-section">
+                    <h5>Seasonality/Trends</h5>
+                    <div id="trends-analysis">
+                        <!-- Trends analysis will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Quality Tab -->
+        <div id="quality" class="tab-content">
+            <h4>Data Quality Assessment</h4>
+            <div class="quality-metrics">
+                <div class="quality-section">
+                    <h5>Completeness</h5>
+                    <div id="completeness-analysis">
+                        <!-- Completeness analysis will be displayed here -->
+                    </div>
+                </div>
+                <div class="quality-section">
+                    <h5>Consistency</h5>
+                    <div id="consistency-analysis">
+                        <!-- Consistency analysis will be displayed here -->
+                    </div>
+                </div>
+                <div class="quality-section">
+                    <h5>Validity</h5>
+                    <div id="validity-analysis">
+                        <!-- Validity analysis will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Relationships Tab -->
+        <div id="relationships" class="tab-content">
+            <h4>Column Relationships</h4>
+            <div class="relationships-analysis">
+                <div class="form-group">
+                    <label for="compare-column">Compare with:</label>
+                    <select id="compare-column" class="form-control">
+                        <option value="">Select column to compare...</option>
+                    </select>
+                </div>
+                <button id="analyze-relationship" class="btn btn-primary">Analyze Relationship</button>
+                <div id="relationship-results">
+                    <!-- Relationship analysis results will be displayed here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="column-actions" id="column-actions" style="display: none;">
+        <h4>Column Actions</h4>
+        <div class="action-buttons">
+            <button id="transform-column" class="btn btn-primary">Transform Column</button>
+            <button id="clean-column" class="btn btn-secondary">Clean Data</button>
+            <button id="encode-column" class="btn btn-secondary">Encode Values</button>
+            <button id="export-analysis" class="btn btn-secondary">Export Analysis</button>
+        </div>
+    </div>
+</div>
+
+<div id="column-loading-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="loading-spinner"></div>
+        <p>Analyzing column data...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/column_analysis.js') }}"></script>
+{% endblock %}
