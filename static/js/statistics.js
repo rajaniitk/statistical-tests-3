@@ -379,89 +379,237 @@ document.addEventListener('DOMContentLoaded', function() {
     function displayNormalityResult(result, column, testType) {
         const container = document.getElementById('normality-results');
         
-        // Check if we have Anderson-Darling specific results
+        // Handle Anderson-Darling specific results
+        let isNormal = false;
+        let hasValidResult = false;
+        
         if (testType === 'anderson_darling' && result.is_normal_5_percent !== undefined) {
-            const isNormal = result.is_normal_5_percent;
-            const conclusion = isNormal ? 
-                'The data appears to be normally distributed' : 
-                'The data does not appear to be normally distributed';
-            
-            const html = `
-                <div class="test-result ${isNormal ? 'normal' : 'not-normal'}">
-                    <h4>Anderson-Darling Test Results for "${column}"</h4>
-                    <div class="result-stats">
-                        <div class="stat-item">
-                            <strong>Test Statistic:</strong> ${safeFormat(result.test_statistic)}
+            isNormal = result.is_normal_5_percent;
+            hasValidResult = true;
+        } else if (result && typeof result.p_value !== 'undefined' && result.p_value !== null) {
+            isNormal = result.p_value >= 0.05;
+            hasValidResult = true;
+        }
+        
+        if (!hasValidResult) {
+            displayNormalityError('Invalid test results - no valid statistical results available', column, testType);
+            return;
+        }
+        
+        const testName = testType.replace('_', ' ').toUpperCase() + ' Normality Test';
+        
+        // Build comprehensive normality test result display
+        let html = `
+            <div style="background: white; border: 3px solid #007cba; border-radius: 15px; padding: 0; margin: 20px 0; overflow: hidden; box-shadow: 0 8px 25px rgba(0,124,186,0.15);">
+                
+                <!-- Header Section -->
+                <div style="background: linear-gradient(135deg, #007cba 0%, #005580 50%, #003d5c 100%); padding: 25px 30px; color: white; position: relative; overflow: hidden;">
+                    <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: rgba(255,255,255,0.1); border-radius: 50%; transform: rotate(45deg);"></div>
+                    <div style="position: relative; z-index: 2;">
+                        <h3 style="margin: 0 0 10px 0; font-size: 24px; font-weight: bold; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
+                            📊 ${testName} Results
+                        </h3>
+                        <div style="background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); border-radius: 20px; padding: 8px 16px; display: inline-block;">
+                            <span style="font-size: 14px; font-weight: bold;">${isNormal ? '✅ NORMAL' : '❌ NOT NORMAL'}</span>
                         </div>
-                        <div class="stat-item">
-                            <strong>Critical Values:</strong> ${result.critical_values ? result.critical_values.map(v => v.toFixed(3)).join(', ') : 'N/A'}
-                        </div>
-                        <div class="stat-item">
-                            <strong>Significance Levels:</strong> ${result.significance_levels ? result.significance_levels.join('%, ') + '%' : 'N/A'}
-                        </div>
-                        <div class="stat-item">
-                            <strong>Sample Size:</strong> ${result.sample_size || 'N/A'}
-                        </div>
-                        <div class="stat-item">
-                            <strong>Normal at 5%:</strong> ${isNormal ? 'Yes' : 'No'}
-                        </div>
-                    </div>
-                    <div class="conclusion">
-                        <strong>Conclusion:</strong> ${conclusion}
-                        <br><small>Anderson-Darling test compares test statistic to critical values</small>
                     </div>
                 </div>
+
+                <!-- Main Content -->
+                <div style="padding: 25px;">
+                    
+                    <!-- Test Information -->
+                    <div style="background: #f0f8ff; border: 2px solid #007cba; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: #005580; margin: 0 0 15px 0; font-size: 18px;">📋 Test Information</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #007cba;">
+                                <strong style="color: #005580;">Variable:</strong><br>
+                                <span style="font-size: 16px; color: #333;">${column}</span>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #ff9800;">
+                                <strong style="color: #e65100;">Test Type:</strong><br>
+                                <span style="font-size: 16px; color: #333;">${testName}</span>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #4caf50;">
+                                <strong style="color: #2e7d32;">Sample Size:</strong><br>
+                                <span style="font-size: 16px; color: #333;">${result.sample_size || 'N/A'}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Test Statistics -->
+                    <div style="background: ${isNormal ? '#e8f5e8' : '#fff3e0'}; border: 2px solid ${isNormal ? '#4caf50' : '#ff9800'}; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: ${isNormal ? '#2e7d32' : '#f57c00'}; margin: 0 0 15px 0; font-size: 18px;">📊 Test Statistics</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #2196f3;">
+                                <div style="font-size: 28px; font-weight: bold; color: #1976d2;">${safeFormat(result.test_statistic)}</div>
+                                <div style="color: #666; font-size: 14px;">Test Statistic</div>
+                            </div>
+        `;
+
+        // Add appropriate statistical display based on test type
+        if (testType === 'anderson_darling') {
+            html += `
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #ff5722;">
+                                <div style="font-size: 18px; font-weight: bold; color: #d84315;">${result.critical_values ? result.critical_values.map(v => v.toFixed(3)).join(', ') : 'N/A'}</div>
+                                <div style="color: #666; font-size: 14px;">Critical Values</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #9c27b0;">
+                                <div style="font-size: 16px; font-weight: bold; color: #7b1fa2;">${result.significance_levels ? result.significance_levels.join('%, ') + '%' : 'N/A'}</div>
+                                <div style="color: #666; font-size: 14px;">Significance Levels</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #607d8b;">
+                                <div style="font-size: 24px; font-weight: bold; color: #455a64;">${isNormal ? 'YES' : 'NO'}</div>
+                                <div style="color: #666; font-size: 14px;">Normal at 5%</div>
+                            </div>
             `;
-            container.innerHTML = html;
-            return;
+        } else {
+            html += `
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #ff5722;">
+                                <div style="font-size: 28px; font-weight: bold; color: #d84315;">${safeFormat(result.p_value)}</div>
+                                <div style="color: #666; font-size: 14px;">P-value</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #9c27b0;">
+                                <div style="font-size: 28px; font-weight: bold; color: #7b1fa2;">0.05</div>
+                                <div style="color: #666; font-size: 14px;">Significance Level (α)</div>
+                            </div>
+            `;
         }
-        
-        // Handle other tests with p-values
-        if (!result || typeof result.p_value === 'undefined' || result.p_value === null) {
-            displayNormalityError('Invalid test results - no p-value available', column, testType);
-            return;
+
+        html += `
+                        </div>
+                    </div>
+        `;
+
+        // Descriptive Statistics
+        if (result.descriptive_stats) {
+            const stats = result.descriptive_stats;
+            html += `
+                    <!-- Descriptive Statistics -->
+                    <div style="background: #e0f2f1; border: 2px solid #4caf50; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: #2e7d32; margin: 0 0 15px 0; font-size: 18px;">📈 Descriptive Statistics</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                            <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border-left: 4px solid #4caf50;">
+                                <div style="font-size: 20px; font-weight: bold; color: #2e7d32;">${safeFormat(stats.mean)}</div>
+                                <div style="color: #666; font-size: 12px;">Mean</div>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border-left: 4px solid #ff9800;">
+                                <div style="font-size: 20px; font-weight: bold; color: #f57c00;">${safeFormat(stats.median)}</div>
+                                <div style="color: #666; font-size: 12px;">Median</div>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border-left: 4px solid #9c27b0;">
+                                <div style="font-size: 20px; font-weight: bold; color: #7b1fa2;">${safeFormat(stats.std)}</div>
+                                <div style="color: #666; font-size: 12px;">Std Dev</div>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border-left: 4px solid #3f51b5;">
+                                <div style="font-size: 20px; font-weight: bold; color: #303f9f;">${safeFormat(stats.skewness)}</div>
+                                <div style="color: #666; font-size: 12px;">Skewness</div>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; border-left: 4px solid #607d8b;">
+                                <div style="font-size: 20px; font-weight: bold; color: #455a64;">${safeFormat(stats.kurtosis)}</div>
+                                <div style="color: #666; font-size: 12px;">Kurtosis</div>
+                            </div>
+                        </div>
+                    </div>
+            `;
         }
+
+        // Comprehensive Conclusion
+        const skewness = result.descriptive_stats ? result.descriptive_stats.skewness : null;
+        const kurtosis = result.descriptive_stats ? result.descriptive_stats.kurtosis : null;
         
-        const isNormal = result.p_value >= 0.05;
-        const conclusion = isNormal ? 
-            'The data appears to be normally distributed' : 
-            'The data does not appear to be normally distributed';
+        let interpretation = result.interpretation || (isNormal ? 'The data appears to be normally distributed.' : 'The data does not appear to be normally distributed.');
         
-        const html = `
-            <div class="test-result ${isNormal ? 'normal' : 'not-normal'}">
-                <h4>${testType.replace('_', ' ').toUpperCase()} Test Results for "${column}"</h4>
-                <div class="result-stats">
-                    <div class="stat-item">
-                        <strong>Test Statistic:</strong> ${safeFormat(result.test_statistic)}
+        let detailedConclusion = '';
+        if (isNormal) {
+            detailedConclusion = `
+                <strong>✅ Data is Normally Distributed:</strong>
+                <p>The ${testName} indicates that the data follows a normal distribution. This means:</p>
+                <ul>
+                    <li>✅ Parametric tests (t-tests, ANOVA) are appropriate</li>
+                    <li>✅ Mean and standard deviation are reliable measures</li>
+                    <li>✅ The data follows the bell curve pattern</li>
+                    <li>✅ Statistical inference assumptions are met</li>
+                    <li>📊 Confidence intervals and hypothesis tests are valid</li>
+                </ul>
+            `;
+        } else {
+            detailedConclusion = `
+                <strong>❌ Data is NOT Normally Distributed:</strong>
+                <p>The ${testName} indicates significant deviation from normality. Consider:</p>
+                <ul>
+                    <li>⚠️ Use non-parametric tests instead of parametric tests</li>
+                    <li>⚠️ Median may be more appropriate than mean</li>
+                    <li>⚠️ Data transformation (log, square root) may help</li>
+                    <li>⚠️ Bootstrap methods for confidence intervals</li>
+                    <li>📊 Consider larger sample sizes</li>
+                </ul>
+            `;
+            
+            if (skewness !== null) {
+                if (Math.abs(skewness) > 2) {
+                    detailedConclusion += `<p><strong>Skewness Issue:</strong> Highly ${skewness > 0 ? 'right' : 'left'}-skewed distribution (${safeFormat(skewness)}) - consider log transformation.</p>`;
+                } else if (Math.abs(skewness) > 0.5) {
+                    detailedConclusion += `<p><strong>Skewness Issue:</strong> Moderately ${skewness > 0 ? 'right' : 'left'}-skewed distribution (${safeFormat(skewness)}).</p>`;
+                }
+            }
+            
+            if (kurtosis !== null) {
+                if (kurtosis > 2) {
+                    detailedConclusion += `<p><strong>Kurtosis Issue:</strong> Heavy-tailed distribution (${safeFormat(kurtosis)}) - more extreme values than normal.</p>`;
+                } else if (kurtosis < -2) {
+                    detailedConclusion += `<p><strong>Kurtosis Issue:</strong> Light-tailed distribution (${safeFormat(kurtosis)}) - fewer extreme values than normal.</p>`;
+                }
+            }
+        }
+
+        html += `
+                    <!-- Conclusion Section -->
+                    <div style="background: ${isNormal ? '#e8f5e8' : '#fff3e0'}; border: 2px solid ${isNormal ? '#4caf50' : '#ff9800'}; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: ${isNormal ? '#2e7d32' : '#f57c00'}; margin: 0 0 15px 0; font-size: 18px;">🎯 Conclusion & Recommendations</h4>
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid ${isNormal ? '#4caf50' : '#ff9800'};">
+                            <div style="font-size: 16px; line-height: 1.6; color: #333;">
+                                ${detailedConclusion}
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <strong>P-value:</strong> ${safeFormat(result.p_value)}
+
+                    <!-- Statistical Decision -->
+                    <div style="background: #e3f2fd; border: 2px solid #2196f3; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                        <h4 style="color: #1976d2; margin: 0 0 15px 0; font-size: 18px;">⚖️ Statistical Decision</h4>
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #2196f3;">
+                            <p style="margin: 0; font-size: 16px; line-height: 1.5; color: #333;">
+                                <strong>${interpretation}</strong>
+                            </p>
+                            <div style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 8px;">
+                                <p style="margin: 0; font-size: 14px; color: #666;">
+                                    <strong>Decision Rule:</strong> 
+                                    ${testType === 'anderson_darling' ? 
+                                        `Test statistic (${safeFormat(result.test_statistic)}) ${isNormal ? '< critical value' : '≥ critical value'} → ${isNormal ? 'Normal' : 'Not Normal'}` :
+                                        `${isNormal ? 
+                                            `p-value (${safeFormat(result.p_value)}) ≥ 0.05 → Fail to reject H₀ (Normal)` : 
+                                            `p-value (${safeFormat(result.p_value)}) < 0.05 → Reject H₀ (Not Normal)`}`}
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <strong>Sample Size:</strong> ${result.sample_size || 'N/A'}
+
+                    <!-- Hypotheses Section -->
+                    <div style="background: #e3f2fd; border: 2px solid #2196f3; border-radius: 10px; padding: 20px;">
+                        <h4 style="color: #1976d2; margin: 0 0 15px 0; font-size: 18px;">📝 Hypotheses</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #2196f3;">
+                                <div style="font-weight: bold; color: #1976d2; margin-bottom: 8px;">Null Hypothesis (H₀):</div>
+                                <div style="color: #333; font-size: 14px;">The data follows a normal distribution</div>
+                            </div>
+                            <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #ff5722;">
+                                <div style="font-weight: bold; color: #d84315; margin-bottom: 8px;">Alternative Hypothesis (H₁):</div>
+                                <div style="color: #333; font-size: 14px;">The data does not follow a normal distribution</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <strong>Significance Level:</strong> 0.05
-                    </div>
+
                 </div>
-                <div class="conclusion">
-                    <strong>Conclusion:</strong> ${conclusion}
-                    ${result.p_value < 0.05 ? 
-                        ' (p < α, reject null hypothesis)' : 
-                        ' (p ≥ α, fail to reject null hypothesis)'}
-                </div>
-                ${result.descriptive_stats ? `
-                <div class="descriptive-stats">
-                    <h5>Descriptive Statistics:</h5>
-                    <div class="stats-grid">
-                        <div class="stat-item">Mean: ${safeFormat(result.descriptive_stats.mean)}</div>
-                        <div class="stat-item">Median: ${safeFormat(result.descriptive_stats.median)}</div>
-                        <div class="stat-item">Std Dev: ${safeFormat(result.descriptive_stats.std)}</div>
-                        <div class="stat-item">Skewness: ${safeFormat(result.descriptive_stats.skewness)}</div>
-                        <div class="stat-item">Kurtosis: ${safeFormat(result.descriptive_stats.kurtosis)}</div>
-                    </div>
-                </div>
-                ` : ''}
             </div>
         `;
         
